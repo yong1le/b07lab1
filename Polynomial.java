@@ -1,12 +1,15 @@
 import java.io.File;
+import java.io.FileWriter;
+import java.io.IOException;
+import java.util.Scanner;
 
 public class Polynomial {
   double coefficients[];
   int exponents[];
 
   public Polynomial() {
-    coefficients = new double[1];
-    exponents = new int[1];
+    coefficients = null;
+    exponents = null;
   }
 
   public Polynomial(double coeff[], int exp[]) {
@@ -14,50 +17,48 @@ public class Polynomial {
     exponents = exp;
   }
 
-  public Polynomial(File file) {}
+  public Polynomial(File file) throws IOException {
+    Scanner s = new Scanner(file);
+    String line = s.nextLine();
+    line = line.replaceAll("-", "+-");
+    String[] splitted = line.split("\\+");
+
+    coefficients = new double[splitted.length];
+    exponents = new int[splitted.length];
+
+    for (int i = 0; i < splitted.length; i++) {
+      String[] subArr = splitted[i].split("x");
+
+      coefficients[i] = Double.parseDouble(subArr[0]);
+      if (subArr.length == 1) {
+        exponents[i] = 0;
+      } else {
+        exponents[i] = Integer.parseInt(subArr[1]);
+      }
+    }
+    s.close();
+  }
 
   public Polynomial add(Polynomial toAdd) {
     int length = this.getDistinctExponents(toAdd);
-
-    // Need to be calling these a lot
-    int selfLength = coefficients.length;
-    int otherLength = toAdd.coefficients.length;
-
     double[] newCoeff = new double[length];
     int[] newExp = new int[length];
 
-    // Used to keep track of which term we are at for each poly
-    int selfIndex = 0;
-    int otherIndex = 0;
+    // Set values of calling object
+    for (int i = 0; i < coefficients.length; i++) {
+      newCoeff[i] = coefficients[i];
+      newExp[i] = exponents[i];
+    }
 
-    // Add each term from smallest exponent to largest exponent
-    for (int i = 0; i < length; i++) {
-
-      // When exponents of both terms are the same
-      if (selfIndex < selfLength
-          && otherIndex < otherLength
-          && exponents[selfIndex] == toAdd.exponents[otherIndex]) {
-        newCoeff[i] = coefficients[selfIndex] + toAdd.coefficients[otherIndex];
-        newExp[i] = exponents[selfIndex];
-        selfIndex++;
-        otherIndex++;
-
-        // Case 1: When we finish adding all terms from calling object
-        // Case 2: When argument object has the smaller exponent
-      } else if (selfIndex >= selfLength
-          || otherIndex < otherLength && exponents[selfIndex] > toAdd.exponents[otherIndex]) {
-        newCoeff[i] = toAdd.coefficients[otherIndex];
-        newExp[i] = toAdd.exponents[otherIndex];
-        otherIndex++;
-
-        // Case 1: When we finish adding all terms from argument object
-        // Case 2: When
-      } else if (otherIndex >= otherLength
-          || selfIndex < selfLength && exponents[selfIndex] < toAdd.exponents[otherIndex]) {
-        newCoeff[i] = coefficients[selfIndex];
-        newExp[i] = exponents[selfIndex];
-        selfIndex++;
+    int offset = 0;
+    for (int i = 0; i < toAdd.coefficients.length; i++) {
+      for (int j = 0; j < coefficients.length; j++) {
+        if (newExp[j] == toAdd.exponents[i]) {
+          newCoeff[j] += toAdd.coefficients[i];
+          break;
+        }
       }
+      // newCoeff[offset]
     }
 
     return new Polynomial(newCoeff, newExp);
@@ -82,7 +83,33 @@ public class Polynomial {
     return new Polynomial();
   }
 
-  public void saveToFile(File file) {}
+  public void saveToFile(String filename) throws IOException {
+    File f = new File(filename);
+    if (!f.exists()) f.createNewFile();
+    FileWriter fw = new FileWriter(f);
+    if (coefficients == null || exponents == null) {
+      fw.close();
+      return;
+    }
+    if (coefficients.length != exponents.length) {
+      fw.close();
+      return;
+    }
+
+    String poly = "";
+    for (int i = 0; i < coefficients.length; i++) {
+      poly += String.valueOf(coefficients[i]);
+      if (exponents[i] != 0) {
+        poly += "x" + String.valueOf(exponents[i]);
+      }
+      if (i != coefficients.length - 1) {
+        poly += "+";
+      }
+    }
+    poly = poly.replaceAll("\\+-", "-");
+    fw.write(poly);
+    fw.close();
+  }
 
   // Returns the number of distinct exponents between the calling
   // object and argument object
@@ -101,9 +128,5 @@ public class Polynomial {
     }
 
     return distinct;
-  }
-
-  private void addToIndex(int[] arr, int index, int value) {
-    arr[index] += value;
   }
 }
