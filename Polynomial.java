@@ -17,54 +17,53 @@ public class Polynomial {
     exponents = exp;
   }
 
-  public Polynomial(File file) throws IOException {
-    Scanner s = new Scanner(file);
-    String line = s.nextLine();
-    line = line.replaceAll("-", "+-");
-    String[] splitted = line.split("\\+");
-
-    coefficients = new double[splitted.length];
-    exponents = new int[splitted.length];
-
-    for (int i = 0; i < splitted.length; i++) {
-      String[] subArr = splitted[i].split("x");
-
-      coefficients[i] = Double.parseDouble(subArr[0]);
-      if (subArr.length == 1) {
-        exponents[i] = 0;
-      } else {
-        exponents[i] = Integer.parseInt(subArr[1]);
-      }
-    }
-    s.close();
-  }
-
   public Polynomial add(Polynomial toAdd) {
-    int length = this.getDistinctExponents(toAdd);
-    double[] newCoeff = new double[length];
-    int[] newExp = new int[length];
-
-    // Set values of calling object
-    for (int i = 0; i < coefficients.length; i++) {
-      newCoeff[i] = coefficients[i];
-      newExp[i] = exponents[i];
+    // check arrays are valid
+    if (!(this.isValid() && toAdd.isValid())) {
+      return new Polynomial();
     }
 
-    int offset = 0;
+    // If arrays only has distinct exponents
+    double[] newCoeff = new double[coefficients.length + toAdd.coefficients.length];
+    int[] newExp = new int[exponents.length + toAdd.exponents.length];
+
+    int index = 0;
+    for (int i = 0; i < coefficients.length; i++) {
+      newCoeff[index] = coefficients[i];
+      newExp[index] = exponents[i];
+      index++;
+    }
+
+    // This flag keeps track of whether we already added our coefficient
+    // at a previous index
+    boolean isNew = true;
     for (int i = 0; i < toAdd.coefficients.length; i++) {
-      for (int j = 0; j < coefficients.length; j++) {
+      isNew = true; // refresh the flag for every term
+      for (int j = 0; j < index; j++) {
         if (newExp[j] == toAdd.exponents[i]) {
+          isNew = false;
           newCoeff[j] += toAdd.coefficients[i];
           break;
         }
       }
-      // newCoeff[offset]
+      if (isNew) {
+        newCoeff[index] = toAdd.coefficients[i];
+        newExp[index] = toAdd.exponents[i];
+        index++;
+      }
     }
+    Polynomial p = new Polynomial(newCoeff, newExp);
 
-    return new Polynomial(newCoeff, newExp);
+    // remove all the zero coefficients at the end
+    p.removeZeros();
+    return p;
   }
 
   public double evaluate(double x) {
+    if (!isValid()) {
+      return 0.0;
+    }
+
     double ans = 0.0;
     for (int i = 0; i < coefficients.length; i++) {
       ans += coefficients[i] * Math.pow(x, exponents[i]);
@@ -76,22 +75,87 @@ public class Polynomial {
     return this.evaluate(x) == 0;
   }
 
+  ///////////////////////////////////////////////////////////////////////////
+  // LAB 2 NEW METHODS //////////////////////////////////////////////////////
+  ///////////////////////////////////////////////////////////////////////////
+
+  public Polynomial(File file) throws IOException {
+    Scanner s = new Scanner(file);
+    // this way, we have a convenient token to split by
+    String line = s.nextLine().replaceAll("-", "+-");
+
+    // happens when first coefficient is negative
+    if (line.charAt(0) == '+') {
+      line = line.replaceFirst("\\+-", "-");
+    }
+
+    String[] splitted = line.split("\\+");
+
+    coefficients = new double[splitted.length];
+    exponents = new int[splitted.length];
+
+    for (int i = 0; i < splitted.length; i++) {
+      String[] subArr = splitted[i].split("x");
+
+      // For an input like x2, x3, -x1
+      if (subArr[0].equals("")) coefficients[i] = 1.0;
+      else if (subArr[0].equals("-")) coefficients[i] = -1.0;
+      else coefficients[i] = Double.parseDouble(subArr[0]);
+
+      // For an input of 3x, 4x
+      if (subArr.length == 1) exponents[i] = 0;
+      else exponents[i] = Integer.parseInt(subArr[1]);
+    }
+    s.close();
+  }
+
   public Polynomial multiply(Polynomial toMult) {
-    // Idea: Create array of self.length x toMult.length and use
-    // 2 nested for loops to multiply coefficients and add exponents
-    // Add helper function to collapse the array into a smaller array
-    return new Polynomial();
+    if (!(isValid() && toMult.isValid())) {
+      return new Polynomial();
+    }
+
+    double[] newCoeff = new double[coefficients.length * toMult.coefficients.length];
+    int[] newExp = new int[exponents.length * toMult.exponents.length];
+
+    boolean isNew = true;
+    int index = 0;
+
+    for (int i = 0; i < exponents.length; i++) {
+      for (int j = 0; j < toMult.coefficients.length; j++) {
+        isNew = true;
+        double curCoeff = coefficients[i] * toMult.coefficients[j];
+        int curExp = exponents[i] + toMult.exponents[j];
+
+        // For every multiplied term, check if the exponent is already existant
+        for (int k = 0; k < index; k++) {
+          if (newExp[k] == curExp) {
+            isNew = false;
+            newCoeff[k] += curCoeff;
+            break;
+          }
+        }
+
+        if (isNew) {
+          newCoeff[index] = curCoeff;
+          newExp[index] = curExp;
+          index++;
+        }
+      }
+    }
+
+    Polynomial p = new Polynomial(newCoeff, newExp);
+    p.removeZeros();
+
+    return p;
   }
 
   public void saveToFile(String filename) throws IOException {
     File f = new File(filename);
     if (!f.exists()) f.createNewFile();
     FileWriter fw = new FileWriter(f);
-    if (coefficients == null || exponents == null) {
-      fw.close();
-      return;
-    }
-    if (coefficients.length != exponents.length) {
+
+    // First check the polynomial is valid
+    if (!isValid()) {
       fw.close();
       return;
     }
@@ -99,34 +163,53 @@ public class Polynomial {
     String poly = "";
     for (int i = 0; i < coefficients.length; i++) {
       poly += String.valueOf(coefficients[i]);
+      // The 0 exponent should not be there
       if (exponents[i] != 0) {
         poly += "x" + String.valueOf(exponents[i]);
       }
+      // Never add the plus sign at the end of the string
       if (i != coefficients.length - 1) {
         poly += "+";
       }
     }
     poly = poly.replaceAll("\\+-", "-");
+
     fw.write(poly);
     fw.close();
   }
 
-  // Returns the number of distinct exponents between the calling
-  // object and argument object
-  private int getDistinctExponents(Polynomial other) {
-    int distinct = exponents.length;
-    boolean isUnique = true;
-    for (int i : other.exponents) {
-      isUnique = true;
-      for (int j : exponents) {
-        if (i == j) {
-          isUnique = false;
-          break;
-        }
+  public void removeZeros() {
+    int length = getValidLength();
+    double[] newCoeff = new double[length];
+    int[] newExp = new int[length];
+
+    int index = 0;
+    for (int i = 0; i < coefficients.length; i++) {
+      if (coefficients[i] != 0) {
+        newCoeff[index] = coefficients[i];
+        newExp[index] = exponents[i];
+        index++;
       }
-      if (isUnique) distinct += 1;
     }
 
-    return distinct;
+    coefficients = newCoeff;
+    exponents = newExp;
+  }
+
+  public boolean isValid() {
+    if (coefficients == null || exponents == null) return false;
+    if (coefficients.length != exponents.length) return false;
+
+    return true;
+  }
+
+  private int getValidLength() {
+    int length = 0;
+    for (double a : coefficients) {
+      if (a != 0) {
+        length++;
+      }
+    }
+    return length;
   }
 }
